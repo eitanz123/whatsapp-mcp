@@ -183,7 +183,8 @@ def send_message(
         "message": status_message
     }
 
-@mcp.tool()
+# v1 scope: media tools disabled. Re-enable by restoring the @mcp.tool() decorators
+# on send_file, send_audio_message, and download_media below. See whatsapp-access PRD.
 def send_file(recipient: str, media_path: str) -> Dict[str, Any]:
     """Send a file such as a picture, raw audio, video or document via WhatsApp to the specified recipient. For group messages use the JID.
     
@@ -203,7 +204,6 @@ def send_file(recipient: str, media_path: str) -> Dict[str, Any]:
         "message": status_message
     }
 
-@mcp.tool()
 def send_audio_message(recipient: str, media_path: str) -> Dict[str, Any]:
     """Send any audio file as a WhatsApp audio message to the specified recipient. For group messages use the JID. If it errors due to ffmpeg not being installed, use send_file instead.
     
@@ -221,7 +221,6 @@ def send_audio_message(recipient: str, media_path: str) -> Dict[str, Any]:
         "message": status_message
     }
 
-@mcp.tool()
 def download_media(message_id: str, chat_jid: str) -> Dict[str, Any]:
     """Download media from a WhatsApp message and get the local file path.
     

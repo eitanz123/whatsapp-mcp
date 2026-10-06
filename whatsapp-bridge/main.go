@@ -6,6 +6,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"math"
 	"math/rand"
 	"net/http"
@@ -29,6 +32,7 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
+	"rsc.io/qr"
 )
 
 // Message represents a chat message for our client
@@ -859,6 +863,7 @@ func main() {
 	// Connect to WhatsApp
 	if client.Store.ID == nil {
 		// No ID stored, this is a new client, need to pair with phone
+		qrPath := filepath.Join(os.TempDir(), "9ton-whatsapp-pairing.png")
 		qrChan, _ := client.GetQRChannel(context.Background())
 		err = client.Connect()
 		if err != nil {
@@ -869,13 +874,46 @@ func main() {
 		// Print QR code for pairing with phone
 		for evt := range qrChan {
 			if evt.Event == "code" {
-				fmt.Println("\nScan this QR code with your WhatsApp app:")
-				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+				if info, statErr := os.Stdout.Stat(); statErr == nil && info.Mode()&os.ModeCharDevice != 0 {
+					fmt.Println("\nScan this QR code with your WhatsApp app:")
+					qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
+				}
+				code, err := qr.Encode(evt.Code, qr.L)
+				if err == nil {
+					qrImage := image.NewGray(image.Rect(0, 0, (code.Size+8)*8, (code.Size+8)*8))
+					for pixelIndex := range qrImage.Pix {
+						qrImage.Pix[pixelIndex] = 0xff
+					}
+					for row := 0; row < code.Size; row++ {
+						for column := 0; column < code.Size; column++ {
+							if code.Black(column, row) {
+								for pixelRow := 0; pixelRow < 8; pixelRow++ {
+									for pixelColumn := 0; pixelColumn < 8; pixelColumn++ {
+										qrImage.SetGray((column+4)*8+pixelColumn, (row+4)*8+pixelRow, color.Gray{Y: 0})
+									}
+								}
+							}
+						}
+					}
+					file, fileErr := os.OpenFile(qrPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+					if fileErr == nil {
+						fileErr = png.Encode(file, qrImage)
+						file.Close()
+						if fileErr == nil {
+							fmt.Printf("Pairing QR image: %s\n", qrPath)
+						}
+					}
+				}
 			} else if evt.Event == "success" {
 				connected <- true
 				break
+			} else if evt.Event == "error" {
+				logger.Errorf("WhatsApp pairing failed: %v", evt.Error)
+			} else {
+				logger.Warnf("WhatsApp pairing event: %s", evt.Event)
 			}
 		}
+		os.Remove(qrPath)
 
 		// Wait for connection
 		select {
